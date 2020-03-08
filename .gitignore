@@ -1,0 +1,9 @@
+.vscode
+.DS_Store
+*data*
+*output*
+*.txt
+*.csv
+*.tsv
+*.labels
+*.md
