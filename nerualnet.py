@@ -10,10 +10,10 @@ class Sigmoid(object):
         self.value = 0
 
     def forward(self, x):
-        self.value = 1.0 / (1 + math.exp(-x))
+        self.value = 1.0 / (1 + np.exp(-x))
         return self.value
 
-    def backward(self, x):
+    def backward(self, x, learning_rate):
         return self.value * (1 - self.value)
 
 
@@ -28,59 +28,49 @@ class linearLayer(object):
         else: # zero initialization
             self.W = np.zeros(size = (input_size, output_size))
             self.b = np.zeros(output_size)
-        self.activations = Sigmoid()
 
-    # TODO: change to SGD rather than mini-batch
     # return the result of linear transformation
-    # x: (batch_size, input_size)
-    # return: (batch_size, output_size)
+    # x: (input_size)
+    # return: (output_size)
     def forward(self, x):
-        self.batch_size = x.shape[0]
         self.x = x
-        self.z = np.dot(x, self.W) + self.b
-        self.A = self.activations.forward(self.z)
-        return self.A
+        self.z = np.dot(self.x, self.W) + self.b
+        return self.z
 
-    # update internal parameters and return delta for last layer
-    # delta: (batch_size, output_size)
-    # return: (batch_size, input_size)
+    # delta: (output_size)
+    # return: (input_size)
     def backward(self, delta, learning_rate):
-        self.dz = self.activations.backward(delta, learning_rate)
-        self.dA = np.dot(self.dz, self.W.T)
-        self.W = self.W - learning_rate * np.dot(self.x.T, self.dz)
-        self.b = self.b - learning_rate * np.sum(self.dz, axis=0)
-        return self.dA
+        # update parameters
+        self.W = self.W - learning_rate * np.dot(self.x.T, delta)
+        self.b = self.b - learning_rate * delta
+
+        # TODO: return delta for last layer
+        delta_last = np.dot(delta, self.W.T)
+        return delta_last
 
 
 class softmaxCrossEntropy(object):
     def __init__(self):
         super(softmaxCrossEntropy, self).__init__()
-        self.sm = 0
+        self.grad = 0
 
-    # x: (batch_size, n_classes)
-    # y: (batch_size,), each item within [0, n_classes-1]
-    # return: (2,), sum of loss and sum of accuracy of all samples
+    # x: (num_class)
+    # y: an integer within [0, num_class - 1]
+    # return: loss
     def forward(self, x, y):
-        self.logits = x
-        self.labels = np.eye(x.shape[1])[y]
-        self.batch_size = self.logits.shape[0]
-        loss = np.zeros((self.logits.shape[0]))
-        self.sm = np.zeros((self.logits.shape))
+        label = np.eye(x.shape)[y] # create one-hot label
+        self.grad = np.zeros((x.shape))
         
-        for i in range(x.shape[0]):
-            a = np.max(self.logits[i]) # use maximum to deal with overflow
-            SumExp = np.sum(np.exp(self.logits[i] - a))
-            self.sm[i] = np.exp(self.logits[i] - a) / SumExp - self.labels[i] # /hat{yi} - yi
-            LogSumExp = a + np.log(SumExp)
-            loss[i] = -np.sum(self.logits[i] * self.labels[i]) + np.sum(self.labels[i]) * LogSumExp
-            if (np.argmax(self.logits[i]) == y[i]):
-                print("correct")
-        return np.sum(loss)
+        a = np.max(x) # use maximum to deal with overflow
+        SumExp = np.sum(np.exp(x - a))
+        self.grad = np.exp(x - a) / SumExp - label # /hat{yi} - yi
+        LogSumExp = a + np.log(SumExp)
+        loss = -np.sum(x * label) + np.sum(label) * LogSumExp # first * -> Hadamard product
+        return loss
 
-    # return delta for last layer
-    # return: (batch_size, n_classes)
+    # return: (num_class)
     def backward(self):
-        return self.sm
+        return self.grad
 
 
 class nn(object):
@@ -97,7 +87,7 @@ class nn(object):
     # SGD_step: update param by taking one SGD step
     # @param
     # <feature> a 1-D numpy array
-    # <label> an integer with in [0, 9]
+    # <label> an integer with in [0, num_class - 1]
     def SGD_step(self, feature, label):
         # pass x through layers one by one
         for layer in self.layers:
@@ -147,13 +137,12 @@ class nn(object):
 
     # predict y given an array x
     def predict(self, x):
-        mid = sparse_dot(words, self.param)
-        prob_posi = sigmoid(mid)
-        if (prob_posi > 0.5):
-            return 1
-        else:
-            return 0
+        for layer in self.layers:
+            x = layer.forward(x)
+        sm = np.exp(x) / np.sum(np.exp(x), axis=0)
+        return np.argmax(sm)
 
+    # TODO: complete this func
     def evaluate(self, in_path, out_path):
         error = 0.
         total = 0.
