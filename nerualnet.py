@@ -7,7 +7,7 @@ num_class = 10
 
 class Sigmoid(object):
     def __init__(self):
-        self.value = 0
+        super(Sigmoid, self).__init__()
 
     def forward(self, x):
         self.value = 1.0 / (1 + np.exp(-x))
@@ -16,17 +16,13 @@ class Sigmoid(object):
     def backward(self, x, learning_rate):
         return self.value * (1 - self.value)
 
-
 class linearLayer(object):
-    # <input_size> feature size of the input samples.
-    # <output_size> output size of each sample.
-    # <init_flag> initialization mode.
     def __init__(self, input_size, output_size, init_flag):
         if (init_flag == 1): # random initialization
-            self.W = np.random.uniform(size = (input_size, output_size))
+            self.W = np.random.uniform((input_size, output_size))
             self.b = np.random.uniform(output_size)
         else: # zero initialization
-            self.W = np.zeros(size = (input_size, output_size))
+            self.W = np.zeros((input_size, output_size))
             self.b = np.zeros(output_size)
 
     # return the result of linear transformation
@@ -41,10 +37,10 @@ class linearLayer(object):
     # return: (input_size)
     def backward(self, delta, learning_rate):
         # update parameters
-        self.W = self.W - learning_rate * np.dot(self.x.T, delta)
+        self.W = self.W - learning_rate * np.dot(self.z.T, delta)
         self.b = self.b - learning_rate * delta
 
-        # TODO: return delta for last layer
+        # TODO?: return delta for last layer
         delta_last = np.dot(delta, self.W.T)
         return delta_last
 
@@ -52,21 +48,23 @@ class linearLayer(object):
 class softmaxCrossEntropy(object):
     def __init__(self):
         super(softmaxCrossEntropy, self).__init__()
-        self.grad = 0
 
     # x: (num_class)
     # y: an integer within [0, num_class - 1]
     # return: loss
     def forward(self, x, y):
-        label = np.eye(x.shape)[y] # create one-hot label
-        self.grad = np.zeros((x.shape))
+        label = np.eye(x.shape[0])[y] # create one-hot label
+        self.grad = np.zeros((x.shape[0]))
         
         a = np.max(x) # use maximum to deal with overflow
         SumExp = np.sum(np.exp(x - a))
         self.grad = np.exp(x - a) / SumExp - label # /hat{yi} - yi
         LogSumExp = a + np.log(SumExp)
         loss = -np.sum(x * label) + np.sum(label) * LogSumExp # first * -> Hadamard product
-        return loss
+
+        sm = np.exp(x) / np.sum(np.exp(x), axis=0)
+        pred = np.argmax(sm)
+        return loss, pred
 
     # return: (num_class)
     def backward(self):
@@ -77,29 +75,27 @@ class nn(object):
     def __init__(self, input_size, hidden_units, learning_rate, init_flag, metrics_out):
         self.learning_rate = learning_rate
         self.metrics_out = metrics_out
-        self.layer = [
+        self.layers = [
             linearLayer(input_size, hidden_units, init_flag),
             Sigmoid(),
             linearLayer(hidden_units, num_class, init_flag)
         ]
         self.criterion = softmaxCrossEntropy()
 
-    # SGD_step: update param by taking one SGD step
-    # @param
-    # <feature> a 1-D numpy array
-    # <label> an integer with in [0, num_class - 1]
-    def SGD_step(self, feature, label):
-        # pass x through layers one by one
+    # SGD_step: update params by taking one SGD step
+    # <x> a 1-D numpy array
+    # <y> an integer within [0, num_class - 1]
+    def SGD_step(self, x, y):
+        # perform forward propogation and compute intermediate results
         for layer in self.layers:
             x = layer.forward(x)
-        
-        # get loss by the criterion
-        loss = self.criterion.forward(feature, label)
+        loss, _ = self.criterion.forward(x, y)
 
-        # back propagation and update parameters
+        # perform back propagation and update parameters
         delta = self.criterion.backward()
         for layer in reversed(self.layers):
             delta = layer.backward(delta, learning_rate)
+
         return loss
 
 
@@ -109,32 +105,34 @@ class nn(object):
         with open(train_file, 'r') as f:
             for line in f:
                 split_line = line.strip().split(',')
-                label = int(split_line[0])
-                feature = np.asarray(split_line[1:])
+                y = int(split_line[0])
+                x = np.asarray(split_line[1:], dtype=int)
                 #feature[len(self.dic)] = 1 # add the bias feature
-                data = [label, feature]
-                dataset.append(data)
+                dataset.append([y, x])
 
         with open(metrics_out, 'w') as f_metrics:
             # perform training
             for epoch in range(num_epoch):
-                train_loss = 0
+                loss = 0
                 for idx in range(len(dataset)):
-                    train_loss += self.SGD_step(dataset[idx][1], dataset[idx][0])
-                    if Debug:
-                        print("[Epoch ", epoch + 1, "] Step ", idx + 1, ", train_loss: ", train_loss)
+                    loss = self.SGD_step(dataset[idx][1], dataset[idx][0])
+                    if Debug and (idx % 10 == 0):
+                        print("[Epoch ", epoch + 1, "] Step ", idx + 1, ", current_loss: ", loss)
+
+                train_loss, train_error = self.evaluate(train_input, train_out)
+                test_loss, test_error = self.evaluate(test_input, test_out)
 
                 if Debug:
                     print("[Epoch ", epoch + 1, "] ", end='')
                     print("train_loss: ", train_loss, end=' ')
-                    print("test_loss: ", self.evaluate(test_input, test_out))
-                    print("train_error: ", self.evaluate(train_input, train_out), end=' ')
-                    print("test_error: ", self.evaluate(test_input, test_out))
+                    print("train_error: ", train_error)
+                    print("test_loss: ", test_loss, end=' ')
+                    print("test_error: ", test_error)
 
-                f_metrics.write("epoch=" + epoch + " crossentryopy(train): " + train_loss + "\n")
-                f_metrics.write("epoch=" + epoch + " crossentryopy(test): " + "\n")
+                f_metrics.write("epoch=" + str(epoch) + " crossentryopy(train): " + str(train_loss) + "\n")
+                f_metrics.write("epoch=" + str(epoch) + " crossentryopy(test): " + str(test_loss) + "\n")
 
-
+    # not used
     # predict y given an array x
     def predict(self, x):
         for layer in self.layers:
@@ -142,27 +140,29 @@ class nn(object):
         sm = np.exp(x) / np.sum(np.exp(x), axis=0)
         return np.argmax(sm)
 
-    # TODO: complete this func
-    def evaluate(self, in_path, out_path):
-        error = 0.
-        total = 0.
+    def evaluate(self, in_path, out_path, write = False):
+        total_loss, error, total = 0, 0., 0.
 
         with open(in_path, 'r') as f_in:
-            with open(out_path, 'w') as f_out:
+            with open(out_path, 'a') as f_out:
                 for line in f_in:
-                    split_line = line.strip().split('\t')
-                    words = dict()
-                    for i in range(1, len(split_line)):
-                        words[int(split_line[i].split(":")[0])] = 1
-                    words[len(self.dic)] = 1 # add the bias feature
+                    split_line = line.strip().split(',')
+                    y = int(split_line[0])
+                    x = np.asarray(split_line[1:], dtype=int)
 
-                    pred = self.predict(words)
-                    if pred != int(split_line[0]):
+                    for layer in self.layers:
+                        x = layer.forward(x)
+                    loss, pred = self.criterion.forward(x, y)
+
+                    total_loss += loss
+                    if pred != y:
                         error += 1
-                    f_out.write(str(pred) + "\n")
+                    if write:
+                        f_out.write(str(pred) + "\n")
                     total += 1
 
-        return error / total # len(data)
+        error_rate = error / total
+        return total_loss, error_rate
 
 
 if __name__ == '__main__':
@@ -189,13 +189,13 @@ if __name__ == '__main__':
     model.train_model(train_input, num_epoch)
 
     # testing: evaluate and write labels to output files
-    train_error = model.evaluate(train_input, train_out)
-    test_error = model.evaluate(test_input, test_out)
+    _, train_error = model.evaluate(train_input, train_out, True)
+    _, test_error = model.evaluate(test_input, test_out, True)
 
     print("train_error: ", train_error)
     print("test_error: ", test_error)
 
     # Output: Metrics File
-    with open(metrics_out, 'w') as f_metrics:
+    with open(metrics_out, 'a') as f_metrics:
         f_metrics.write("error(train): " + str(train_error) + "\n")
         f_metrics.write("error(test): " + str(test_error) + "\n")
