@@ -2,7 +2,8 @@ import sys
 import math
 import numpy as np
 
-Debug = True
+Debug = False
+PrintGrad = False
 num_class = 10
 epsilon = 1e-5
 diff_th = 1e-7
@@ -17,7 +18,8 @@ class Sigmoid(object):
 
     def backward(self, delta, learning_rate):
         grad = delta * (self.z * (1 - self.z))
-        #print("     Sigmoid grad: ", grad)
+        if PrintGrad:
+            print("     Sigmoid grad: ", grad)
         return grad
 
 class linearLayer(object):
@@ -40,12 +42,19 @@ class linearLayer(object):
     # delta: (output_size)
     # return: (input_size)
     def backward(self, delta, learning_rate):
-        # [first] compute delta_last
+        # FIRST compute delta_last
         delta_last = np.dot(delta, self.W.T)
 
         # then update parameters
         dW = np.dot(self.x.reshape(self.x.shape[0], 1), delta.reshape(1, delta.shape[0]))
-        #print("     dW: ", dW)
+        if PrintGrad:
+            print("     dW: ", dW)
+
+        self.W = self.W - learning_rate * dW
+        self.b = self.b - learning_rate * delta
+
+        # finite difference approximation
+        # TODO: buggy
         '''
         if Debug:
             grad = np.zeros(self.W.shape[0])
@@ -62,8 +71,6 @@ class linearLayer(object):
                 print("dW: ", dW)
                 print("grad: ", grad)
         '''
-        self.W = self.W - learning_rate * dW
-        self.b = self.b - learning_rate * delta
 
         return delta_last
 
@@ -110,23 +117,29 @@ class nn(object):
     # <y> an integer within [0, num_class - 1]
     def SGD_step(self, x, y):
         # perform forward propogation and compute intermediate results
-        #print("		Begin forward pass")
+        if PrintGrad:
+            print("		Begin forward pass")
         for layer in self.layers:
             x = layer.forward(x)
-            #print("     output: ", x)
+            if PrintGrad:
+                print("     output: ", x)
         loss, _ = self.criterion.forward(x, y)
-        #print("			Cross entropy: ", loss)
+        if PrintGrad:
+            print("			Cross entropy: ", loss)
+            print("		Begin backward pass")
 
-        #print("		Begin backward pass")
         # perform back propagation and update parameters
         delta = self.criterion.backward()
-        #print("			d(loss)/d(softmax inputs): ", delta)
+        if PrintGrad:
+            print("			d(loss)/d(softmax inputs): ", delta)
         for layer in reversed(self.layers):
             delta = layer.backward(delta, learning_rate)
-            #print("     delta: ", delta)
+            if PrintGrad:
+                print("     delta: ", delta)
 
-        #print("			New first layer weights: ", self.layers[0].W)
-        #print("			New second layer weights: ", self.layers[2].W)
+        if PrintGrad:
+            print("			New first layer weights: ", self.layers[0].W)
+            print("			New second layer weights: ", self.layers[2].W)
         return loss
 
 
@@ -147,7 +160,7 @@ class nn(object):
                 loss = 0
                 for idx in range(len(dataset)):
                     loss = self.SGD_step(dataset[idx][1], dataset[idx][0])
-                    if Debug and (idx % 1 == 0):
+                    if Debug and (idx % 1000 == 0):
                         print("[Epoch ", epoch + 1, "] Step ", idx + 1, ", current_loss: ", loss)
 
                 train_loss, train_error = self.evaluate(train_input, train_out)
@@ -163,8 +176,8 @@ class nn(object):
                 f_metrics.write("epoch=" + str(epoch) + " crossentryopy(train): " + str(train_loss) + "\n")
                 f_metrics.write("epoch=" + str(epoch) + " crossentryopy(test): " + str(test_loss) + "\n")
 
-    # not used
     # predict y given an array x
+    # not used
     def predict(self, x):
         for layer in self.layers:
             x = layer.forward(x)
@@ -196,6 +209,10 @@ class nn(object):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) != 10:
+        print("The number of command parameters is incorrect.")
+        exit(-1)
+
     train_input = sys.argv[1]  # path to the training input .csv file
     test_input = sys.argv[2] # path to the test input .csv file
     train_out = sys.argv[3] # path to output .labels file which predicts on trainning data
@@ -219,12 +236,14 @@ if __name__ == '__main__':
     model.train_model(train_input, num_epoch)
 
     # testing: evaluate and write labels to output files
-    _, train_error = model.evaluate(train_input, train_out, True)
-    _, test_error = model.evaluate(test_input, test_out, True)
+    train_loss, train_error = model.evaluate(train_input, train_out, True)
+    test_loss, test_error = model.evaluate(test_input, test_out, True)
 
+    print("train_loss: ", train_loss, end=' ')
     print("train_error: ", train_error)
+    print("test_loss: ", test_loss, end=' ')
     print("test_error: ", test_error)
-
+    
     # Output: Metrics File
     with open(metrics_out, 'a') as f_metrics:
         f_metrics.write("error(train): " + str(train_error) + "\n")

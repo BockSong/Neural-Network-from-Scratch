@@ -7,3 +7,4 @@
 *.tsv
 *.labels
 *.md
+.ipynb_checkpoints/
