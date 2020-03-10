@@ -7,4 +7,5 @@
 *.tsv
 *.labels
 *.md
-.ipynb_checkpoints/
+__pycache__/
+*ipynb*

@@ -46,6 +46,7 @@ class linearLayer(object):
         delta_last = np.dot(delta, self.W.T)
 
         # then update parameters
+        # increase dimension to 2 (generally d-1 shoule be batch_size)
         dW = np.dot(self.x.reshape(self.x.shape[0], 1), delta.reshape(1, delta.shape[0]))
         if PrintGrad:
             print("     dW: ", dW)
@@ -53,8 +54,7 @@ class linearLayer(object):
         self.W = self.W - learning_rate * dW
         self.b = self.b - learning_rate * delta
 
-        # finite difference approximation
-        # TODO: buggy
+        # TODO: finite difference approximation
         '''
         if Debug:
             grad = np.zeros(self.W.shape[0])
