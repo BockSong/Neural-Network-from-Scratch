@@ -2,7 +2,7 @@ import sys
 import math
 import numpy as np
 
-Debug = False
+Debug = True
 num_class = 10
 epsilon = 1e-5
 diff_th = 1e-7
@@ -23,8 +23,8 @@ class Sigmoid(object):
 class linearLayer(object):
     def __init__(self, input_size, output_size, init_flag):
         if (init_flag == 1): # random initialization
-            self.W = np.random.uniform((input_size, output_size))
-            self.b = np.random.uniform(output_size)
+            self.W = np.random.uniform(low = -0.1, high = 0.1, size = (input_size, output_size))
+            self.b = np.random.uniform(low = -0.1, high = 0.1, size = (output_size))
         else: # zero initialization
             self.W = np.zeros((input_size, output_size))
             self.b = np.zeros(output_size)
