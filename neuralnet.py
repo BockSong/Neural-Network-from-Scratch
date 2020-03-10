@@ -2,19 +2,23 @@ import sys
 import math
 import numpy as np
 
-Debug = True
+Debug = False
 num_class = 10
+epsilon = 1e-5
+diff_th = 1e-7
 
 class Sigmoid(object):
     def __init__(self):
         super(Sigmoid, self).__init__()
 
     def forward(self, x):
-        self.value = 1.0 / (1 + np.exp(-x))
-        return self.value
+        self.z = 1.0 / (1 + np.exp(-x))
+        return self.z
 
-    def backward(self, x, learning_rate):
-        return self.value * (1 - self.value)
+    def backward(self, delta, learning_rate):
+        grad = delta * (self.z * (1 - self.z))
+        #print("     Sigmoid grad: ", grad)
+        return grad
 
 class linearLayer(object):
     def __init__(self, input_size, output_size, init_flag):
@@ -30,18 +34,37 @@ class linearLayer(object):
     # return: (output_size)
     def forward(self, x):
         self.x = x
-        self.z = np.dot(self.x, self.W) + self.b
-        return self.z
+        self.a = np.dot(self.x, self.W) + self.b
+        return self.a
 
     # delta: (output_size)
     # return: (input_size)
     def backward(self, delta, learning_rate):
-        # update parameters
-        self.W = self.W - learning_rate * np.dot(self.z.T, delta)
+        # [first] compute delta_last
+        delta_last = np.dot(delta, self.W.T)
+
+        # then update parameters
+        dW = np.dot(self.x.reshape(self.x.shape[0], 1), delta.reshape(1, delta.shape[0]))
+        #print("     dW: ", dW)
+        '''
+        if Debug:
+            grad = np.zeros(self.W.shape[0])
+            for m in range(1, len(grad) + 1):
+                d = np.zeros(self.W.shape[0])
+                d[m] = 1
+                v = np.dot(self.x, self.W + epsilon * d) + self.b
+                v -= np.dot(self.x, self.W - epsilon * d) + self.b
+                v /= 2 * epsilon
+                grad[m] = v
+            
+            if np.linalg.norm(dW - grad) > diff_th:
+                print("Gradient compute error!")
+                print("dW: ", dW)
+                print("grad: ", grad)
+        '''
+        self.W = self.W - learning_rate * dW
         self.b = self.b - learning_rate * delta
 
-        # TODO?: return delta for last layer
-        delta_last = np.dot(delta, self.W.T)
         return delta_last
 
 
@@ -87,15 +110,23 @@ class nn(object):
     # <y> an integer within [0, num_class - 1]
     def SGD_step(self, x, y):
         # perform forward propogation and compute intermediate results
+        #print("		Begin forward pass")
         for layer in self.layers:
             x = layer.forward(x)
+            #print("     output: ", x)
         loss, _ = self.criterion.forward(x, y)
+        #print("			Cross entropy: ", loss)
 
+        #print("		Begin backward pass")
         # perform back propagation and update parameters
         delta = self.criterion.backward()
+        #print("			d(loss)/d(softmax inputs): ", delta)
         for layer in reversed(self.layers):
             delta = layer.backward(delta, learning_rate)
+            #print("     delta: ", delta)
 
+        #print("			New first layer weights: ", self.layers[0].W)
+        #print("			New second layer weights: ", self.layers[2].W)
         return loss
 
 
@@ -116,7 +147,7 @@ class nn(object):
                 loss = 0
                 for idx in range(len(dataset)):
                     loss = self.SGD_step(dataset[idx][1], dataset[idx][0])
-                    if Debug and (idx % 10 == 0):
+                    if Debug and (idx % 1 == 0):
                         print("[Epoch ", epoch + 1, "] Step ", idx + 1, ", current_loss: ", loss)
 
                 train_loss, train_error = self.evaluate(train_input, train_out)
@@ -141,7 +172,7 @@ class nn(object):
         return np.argmax(sm)
 
     def evaluate(self, in_path, out_path, write = False):
-        total_loss, error, total = 0, 0., 0.
+        total_loss, error, total = 0., 0., 0.
 
         with open(in_path, 'r') as f_in:
             with open(out_path, 'a') as f_out:
@@ -161,8 +192,7 @@ class nn(object):
                         f_out.write(str(pred) + "\n")
                     total += 1
 
-        error_rate = error / total
-        return total_loss, error_rate
+        return total_loss / total, error / total
 
 
 if __name__ == '__main__':
